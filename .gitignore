@@ -1,0 +1,38 @@
+# Dependências
+node_modules/
+package-lock.json
+yarn.lock
+
+# Variáveis de ambiente - NUNCA COMMITAR!
+.env
+
+# Dados sensíveis
+data/conversations.json
+data/*.db
+*.sqlite
+
+# Sessões do WhatsApp - CONTÉM DADOS SENSÍVEIS!
+.wwebjs_auth/
+.wwebjs_cache/
+.wwebjs_auth_teste/
+
+# Logs
+logs/
+*.log
+
+# Sistema
+.DS_Store
+Thumbs.db
+
+# PM2
+.pm2/
+ecosystem.config.js.backup
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# QR Codes
+qr-code.png

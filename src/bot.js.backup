@@ -1,0 +1,338 @@
+const { Client, LocalAuth } = require("whatsapp-web.js");
+const qrcode = require("qrcode-terminal");
+require("dotenv").config();
+
+const ArceeAIAgent = require("./ai-agent");
+const MessageHandler = require("./message-handler");
+const audioHandler = require("./audio-handler");
+const conversationMemory = require("./conversation-memory");
+
+// Configurações
+const OWNER_PHONE = process.env.OWNER_PHONE || "552299871594"; // Ana Cláudia
+const BOT_NAME = process.env.BOT_NAME || "Ana Cláudia";
+
+// Verifica se suporte a áudio está habilitado
+const AUDIO_ENABLED = audioHandler.isAudioEnabled();
+if (AUDIO_ENABLED) {
+  console.log("🎤 Suporte a ÁUDIO HABILITADO (OpenAI Whisper)");
+} else {
+  console.log(
+    "📝 Modo TEXTO apenas (configure OPENAI_API_KEY para habilitar áudio)"
+  );
+}
+
+console.log("\n⚠️  BOT DE PRODUÇÃO - Ana Cláudia");
+console.log("📱 Número: +55 22 99871-5947");
+console.log("🎯 Modo: Conversação humanizada (Arcee.ai)");
+console.log("❌ SEM respostas automáticas - Tudo via IA\n");
+
+// Inicializa componentes
+const aiAgent = new ArceeAIAgent();
+const messageHandler = new MessageHandler(aiAgent);
+
+// Configuração do cliente WhatsApp
+const client = new Client({
+  authStrategy: new LocalAuth({
+    dataPath: "./.wwebjs_auth",
+  }),
+  puppeteer: {
+    headless: true,
+    executablePath:
+      "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+    args: [
+      "--no-sandbox",
+      "--disable-setuid-sandbox",
+      "--disable-dev-shm-usage",
+      "--disable-accelerated-2d-canvas",
+      "--no-first-run",
+      "--no-zygote",
+      "--disable-gpu",
+    ],
+  },
+});
+
+// Eventos do WhatsApp
+client.on("qr", (qr) => {
+  console.log("\n🔐 ESCANEIE O QR CODE ABAIXO COM O WHATSAPP:\n");
+  qrcode.generate(qr, { small: true });
+  console.log(
+    "\n📱 Abra o WhatsApp → Aparelhos Conectados → Conectar Aparelho\n"
+  );
+});
+
+client.on("ready", () => {
+  console.log("\n✅ Bot conectado com sucesso!");
+  console.log(`🤖 ${BOT_NAME} está online e pronto para atender!`);
+  console.log("📊 Aguardando mensagens...\n");
+  console.log("=".repeat(50));
+
+  // Limpa conversas antigas a cada 24h
+  setInterval(() => {
+    messageHandler.cleanOldConversations();
+  }, 24 * 60 * 60 * 1000);
+});
+
+client.on("authenticated", () => {
+  console.log("🔓 Autenticação realizada com sucesso!");
+});
+
+client.on("auth_failure", (msg) => {
+  console.error("❌ Falha na autenticação:", msg);
+  console.log("💡 Tente deletar a pasta .wwebjs_auth e reconectar");
+});
+
+client.on("disconnected", (reason) => {
+  console.log("⚠️  Bot desconectado:", reason);
+  console.log("🔄 Tentando reconectar...");
+});
+
+// Processa mensagens recebidas
+client.on("message", async (msg) => {
+  try {
+    // Ignora mensagens de grupos e status
+    if (msg.from.includes("@g.us") || msg.from === "status@broadcast") {
+      return;
+    }
+
+    // Ignora mensagens próprias
+    if (msg.fromMe) {
+      return;
+    }
+
+    const chatId = msg.from;
+    const contact = await msg.getContact();
+    const contactName = contact.pushname || contact.name || chatId;
+
+    // ========================================
+    // DETECTA LEAD DO FACEBOOK
+    // ========================================
+    const isAdLead = conversationMemory.isFromFacebookAd(msg.body);
+    const leadSource = isAdLead ? "facebook_ad" : "direct";
+
+    console.log("\n" + "=".repeat(50));
+
+    if (isAdLead) {
+      console.log(`🎯 [LEAD ANÚNCIO FB] Novo lead detectado!`);
+      console.log(`� Região: Campos dos Goytacazes/RJ`);
+      console.log(`💬 Origem: Anúncio Facebook`);
+    }
+
+    console.log(`�📩 Mensagem de: ${contactName}`);
+    console.log(`📱 Número: ${chatId}`);
+    console.log(`📝 Tipo: ${msg.type}`);
+    console.log(`⏰ Horário: ${new Date().toLocaleString("pt-BR")}`);
+
+    // ========================================
+    // SALVA MENSAGEM DO CLIENTE NO BD
+    // ========================================
+    const messageContent = msg.body || `[${msg.type}]`;
+    conversationMemory.saveMessage(
+      chatId,
+      contactName,
+      msg.type,
+      messageContent,
+      false, // não é do bot
+      msg.timestamp,
+      {
+        leadSource,
+        isAdLead,
+      }
+    );
+
+    // ========================================
+    // PROCESSA ÁUDIO (se habilitado)
+    // ========================================
+    if (msg.type === "ptt" || msg.type === "audio") {
+      console.log("🎤 Áudio recebido");
+
+      if (AUDIO_ENABLED) {
+        // ÁUDIO HABILITADO: Transcreve com OpenAI Whisper
+        try {
+          console.log("🔄 Transcrevendo áudio com OpenAI Whisper...");
+
+          const chat = await msg.getChat();
+          await chat.sendStateTyping();
+
+          // Transcreve o áudio
+          const transcription = await audioHandler.processWhatsAppAudio(msg);
+
+          console.log(`💬 Transcrição: ${transcription}`);
+          console.log(`🕐 Horário: ${new Date().toLocaleString("pt-BR")}`);
+
+          // Salva transcrição no BD
+          conversationMemory.saveMessage(
+            chatId,
+            contactName,
+            "audio_transcribed",
+            transcription,
+            false, // é do cliente (transcrição)
+            msg.timestamp
+          );
+
+          // Busca contexto da conversa anterior
+          const context = conversationMemory.getContextForAI(chatId, 10);
+
+          // Processa como texto normal com Arcee.ai
+          await chat.sendStateTyping();
+          const response = await messageHandler.handleMessage(
+            chatId,
+            transcription,
+            context
+          );
+
+          // Simula tempo de digitação
+          const typingTime = Math.random() * 2000 + 1000;
+          await new Promise((resolve) => setTimeout(resolve, typingTime));
+
+          await msg.reply(response.reply);
+          console.log(
+            `🤖 Resposta enviada: ${response.reply.substring(0, 100)}...`
+          );
+
+          // Salva resposta do bot no BD
+          conversationMemory.saveMessage(
+            chatId,
+            BOT_NAME,
+            "text",
+            response.reply,
+            true, // é do bot
+            Date.now() / 1000
+          );
+
+          // Notifica o dono se necessário
+          if (response.shouldNotifyOwner) {
+            await notifyOwner(response.reason, response.contactInfo, chatId);
+          }
+        } catch (audioError) {
+          console.error("❌ Erro ao processar áudio:", audioError.message);
+          await msg.reply(
+            "Desculpe, tive um probleminha ao processar seu áudio. Pode digitar sua mensagem? 😊"
+          );
+        }
+      } else {
+        // ÁUDIO DESABILITADO: Pede para enviar texto
+        console.log("⚠️  Áudio não habilitado, pedindo texto");
+        await msg.reply(`Oi! 😊 
+
+Recebi seu áudio, mas para te atender melhor, você pode digitar sua mensagem? 
+
+Assim consigo te responder mais rápido! 📝`);
+      }
+
+      console.log("=".repeat(50) + "\n");
+      return;
+    }
+
+    // ========================================
+    // PROCESSA TEXTO (Arcee.ai)
+    // ========================================
+    console.log(`💬 Conteúdo: ${msg.body}`);
+    console.log(`🕐 Horário: ${new Date().toLocaleString("pt-BR")}`);
+
+    // Busca contexto da conversa anterior
+    const context = conversationMemory.getContextForAI(chatId, 10);
+
+    // Indicador de digitação
+    const chat = await msg.getChat();
+    await chat.sendStateTyping();
+
+    // Processa mensagem com IA
+    const response = await messageHandler.handleMessage(
+      chatId,
+      msg.body,
+      context
+    );
+
+    // Simula tempo de digitação humano (1-3 segundos)
+    const typingTime = Math.random() * 2000 + 1000;
+    await new Promise((resolve) => setTimeout(resolve, typingTime));
+
+    // Envia resposta
+    await msg.reply(response.reply);
+    console.log(`🤖 Resposta enviada: ${response.reply.substring(0, 100)}...`);
+
+    // Salva resposta do bot no BD
+    conversationMemory.saveMessage(
+      chatId,
+      BOT_NAME,
+      "text",
+      response.reply,
+      true, // é do bot
+      Date.now() / 1000
+    );
+
+    // Notifica o dono se necessário
+    if (response.shouldNotifyOwner) {
+      await notifyOwner(response.reason, response.contactInfo, chatId);
+    }
+
+    console.log("=".repeat(50) + "\n");
+  } catch (error) {
+    console.error("❌ Erro ao processar mensagem:", error);
+
+    try {
+      await msg.reply(
+        "Desculpe, tive um probleminha aqui. Pode repetir sua mensagem? 😊"
+      );
+    } catch (replyError) {
+      console.error("❌ Erro ao enviar mensagem de erro:", replyError);
+    }
+  }
+});
+
+/**
+ * Notifica o dono quando um lead importante chega
+ */
+async function notifyOwner(reason, contactInfo, chatId) {
+  try {
+    const ownerNumber = OWNER_PHONE.includes("@c.us")
+      ? OWNER_PHONE
+      : `${OWNER_PHONE}@c.us`;
+
+    const message = `🚨 *ALERTA - LEAD QUENTE!*
+
+${reason}
+
+📋 *Informações do Cliente:*
+👤 Nome: ${contactInfo.name}
+💼 Trabalho: ${contactInfo.workType}
+💰 Renda: ${contactInfo.income}
+🎂 Idade: ${contactInfo.age}
+📨 Mensagens trocadas: ${contactInfo.messagesCount}
+🕐 Iniciou em: ${contactInfo.startedAt.toLocaleString("pt-BR")}
+
+⚡ *ENTRE EM CONTATO AGORA!*
+Chat ID: ${chatId}`;
+
+    await client.sendMessage(ownerNumber, message);
+    console.log("📢 Notificação enviada ao dono!");
+  } catch (error) {
+    console.error("❌ Erro ao notificar dono:", error);
+  }
+}
+
+// Tratamento de erros globais
+process.on("unhandledRejection", (reason, promise) => {
+  console.error("❌ Unhandled Rejection:", reason);
+});
+
+process.on("uncaughtException", (error) => {
+  console.error("❌ Uncaught Exception:", error);
+  // Não encerra o processo, tenta manter o bot rodando
+});
+
+// Graceful shutdown
+process.on("SIGINT", async () => {
+  console.log("\n\n⚠️  Encerrando bot...");
+  await client.destroy();
+  console.log("✅ Bot encerrado com sucesso!");
+  process.exit(0);
+});
+
+// Inicia o bot
+console.log("🚀 Iniciando WhatsBot com IA...");
+console.log(`🤖 Nome: ${BOT_NAME}`);
+console.log(`🏢 Empresa: ${process.env.COMPANY_NAME}`);
+console.log("\n⏳ Aguardando QR Code...\n");
+
+client.initialize();
