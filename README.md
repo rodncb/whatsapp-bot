@@ -19,7 +19,309 @@ Bot de WhatsApp com Inteligência Artificial para qualificação automática de 
 - ✅ Sessões do WhatsApp isoladas localmente
 - ✅ Dados de conversas apenas na sua máquina
 
-## 📋 Pré-requisitos
+## 🤖 Regras de Comportamento do Bot - Ana Cláudia
+
+**Data:** 15 de outubro de 2025  
+**Versão:** 2.0 - Modo Inteligente
+
+---
+
+## 📋 Resumo das Regras
+
+O bot agora opera com **3 regras de segurança** para não interferir em conversas que não deve:
+
+### ✅ Quando o Bot RESPONDE:
+
+1. **Contato NOVO** (sem histórico no banco de dados)
+2. **Mensagens diretas** (não-grupo)
+3. **Ana NÃO participou** dessa conversa hoje
+
+### ❌ Quando o Bot NÃO RESPONDE:
+
+1. **Cliente antigo** (já tem histórico de mensagens)
+2. **Ana já conversou** com esse contato hoje
+3. **Mensagens de GRUPO** (sempre ignora)
+
+---
+
+## 🎭 Comportamento do Bot
+
+### Identidade
+
+- Bot **sempre** se apresenta como **Ana Cláudia**
+- **NUNCA** revela que é um bot ou assistente virtual
+- Cliente não percebe que está falando com IA
+
+### Objetivo
+
+1. **Qualificar o lead:**
+   - Nome
+   - Tipo de trabalho (CLT/Autônomo)
+   - Renda familiar
+   - Idade
+2. **Quando lead qualificado:**
+   - Bot **silenciosamente** notifica Ana no **22 99905-5098**
+   - Bot **continua respondendo** normalmente
+   - Ana real **assume quando puder**
+   - Cliente **não sabe** que houve troca
+
+### Respostas sobre Imóveis
+
+Bot é **sempre genérico**:
+
+✅ **Respostas corretas:**
+
+- "Trabalho com diversos imóveis nessa região"
+- "Tenho várias opções dentro dessa faixa de preço"
+- "Após entender seu perfil, vou apresentar as melhores opções"
+- "Preciso avaliar suas necessidades para indicar o imóvel ideal"
+
+❌ **NÃO fazer:**
+
+- Dar endereços específicos
+- Prometer imóveis que não existem
+- Dar detalhes técnicos (número de quartos, metragem, etc.)
+- Falar valores específicos de imóveis
+
+**Estratégia:** Qualifica primeiro, Ana mostra imóveis depois.
+
+---
+
+## 🔔 Sistema de Notificações
+
+### Quando Ana é Notificada:
+
+Quando o lead está **qualificado** (aceitou fazer análise de crédito ou enviou documentos), o bot envia uma mensagem **silenciosa** para:
+
+**📱 Celular da Ana:** 22 99905-5098
+
+**Formato da notificação:**
+
+```
+🎯 LEAD QUALIFICADO!
+
+[Motivo da qualificação]
+
+📋 Dados do Cliente:
+👤 Nome: [nome]
+📱 WhatsApp: [número]
+💼 Trabalho: [CLT/Autônomo]
+💰 Renda: [valor]
+🎂 Idade: [idade]
+📨 Mensagens: [quantidade]
+🕐 Início: [horário]
+
+⚡ Cliente aguardando! Assuma quando puder.
+
+💡 O cliente NÃO sabe que houve troca de atendente.
+```
+
+### Importante:
+
+- Cliente **nunca vê** essa notificação
+
+## � Sistema de Follow-up Automático
+
+## 📋 Visão Geral
+
+Sistema inteligente que **detecta automaticamente** quando um cliente promete enviar documentos ou informações, e **envia lembretes às 19h todo dia** para quem está devendo.
+
+## 🎯 Como Funciona
+
+### 1. **Detecção Automática**
+
+O bot detecta frases como:
+
+- "Vou enviar"
+- "Mando depois"
+- "Chegando em casa te envio"
+- "Posso fazer isso mais tarde"
+- "Envio quando puder"
+- "Logo mando"
+
+### 2. **Marca como Pendente**
+
+Quando detecta, o bot:
+
+- ✅ Marca o contato como "aguardando documentos"
+- 📅 Agenda follow-up automático para o dia seguinte às 19h
+- 📊 Registra no banco de dados
+
+### 3. **Envia Lembrete Automático**
+
+Às **19h todo dia**, o bot:
+
+- 🔍 Verifica quem está devendo documentos
+- 📤 Envia mensagem de lembrete amigável
+- ✅ Marca como enviado
+
+### 4. **Remove Pendência**
+
+Quando cliente envia:
+
+- 📄 Documento
+- 🖼️ Imagem
+- 🎤 Áudio
+
+O bot **automaticamente remove a pendência** e para de cobrar.
+
+## 📱 Mensagem de Follow-up
+
+```
+Oi [Nome]! 😊
+
+Tudo bem? Passando aqui pra lembrar dos documentos que você ia me enviar!
+
+Quando tiver um tempinho, me manda:
+📄 RG e CPF
+📄 Contracheque (se CLT) ou Extrato bancário (se autônomo)
+
+Assim a gente consegue dar andamento na sua análise de crédito! 🏠✨
+
+Qualquer dúvida, estou por aqui! 😊
+```
+
+## ⚙️ Configuração
+
+### Horário do Follow-up
+
+O follow-up roda **às 19h** todo dia (horário de Brasília).
+
+Para alterar o horário, edite em `src/follow-up-manager.js`:
+
+```javascript
+'0 19 * * *', // Às 19h todo dia
+```
+
+Exemplos de horários:
+
+- `'0 18 * * *'` - 18h todo dia
+- `'0 20 * * *'` - 20h todo dia
+- `'0 12 * * *'` - 12h (meio-dia) todo dia
+- `'0 9,19 * * *'` - 9h e 19h todo dia
+
+### Banco de Dados
+
+Tabelas utilizadas:
+
+**contacts**
+
+- `follow_up_status` - Status: 'pending', 'awaiting_documents', 'completed'
+
+**follow_ups**
+
+- `id` - ID único
+- `phone_number` - Número do contato
+- `scheduled_date` - Data/hora agendada
+- `follow_up_type` - Tipo: 'awaiting_documents'
+- `status` - Status: 'pending', 'sent', 'completed'
+- `message_sent` - Se foi enviado (0 ou 1)
+- `sent_at` - Quando foi enviado
+
+## 🧪 Como Testar
+
+## � Sistema de Fallback Automático - Arcee.ai → OpenAI
+
+**Data:** 15/10/2025 09:55  
+**Versão:** 1.0
+
+---
+
+## 📋 Como Funciona
+
+O bot agora tenta **duas APIs de IA** automaticamente:
+
+### 1ª Tentativa: Arcee.ai 🎯
+
+- API principal
+- Mais específica para o domínio
+- Se funcionar: usa a resposta ✅
+
+### 2ª Tentativa: OpenAI (GPT-4o-mini) 🔄
+
+- API de backup
+- **Só é chamada se Arcee.ai falhar**
+- Modelo rápido e barato (~$0.15 por milhão de tokens)
+- Se funcionar: usa a resposta ✅
+
+### Fallback Final: Mensagem de Erro 💬
+
+- Só acontece se **ambas** falharem
+- Resposta: "Desculpe, estou com um probleminha técnico..."
+
+---
+
+## 🎬 Fluxo de Execução
+
+```
+Cliente envia mensagem
+    ↓
+Bot tenta Arcee.ai
+    ├─ Sucesso? → Responde com Arcee.ai ✅
+    └─ Falhou?
+        ↓
+    Bot tenta OpenAI (fallback)
+        ├─ Sucesso? → Responde com OpenAI ✅
+        └─ Falhou? → Mensagem de erro ❌
+```
+
+---
+
+## 📊 Logs no Terminal
+
+### Quando Arcee.ai funciona:
+
+```
+🔄 Tentando Arcee.ai...
+✅ Arcee.ai respondeu com sucesso!
+🤖 Resposta enviada: Ótimo! Qual seu nome?
+```
+
+### Quando Arcee.ai falha mas OpenAI funciona:
+
+```
+🔄 Tentando Arcee.ai...
+❌ Arcee.ai falhou: Resposta inválida da API
+🔄 Tentando OpenAI como fallback...
+✅ OpenAI respondeu com sucesso!
+🤖 Resposta enviada: Ótimo! Qual seu nome?
+```
+
+### Quando ambas falham:
+
+```
+🔄 Tentando Arcee.ai...
+❌ Arcee.ai falhou: Resposta inválida da API
+🔄 Tentando OpenAI como fallback...
+❌ OpenAI também falhou: Network timeout
+🤖 Resposta enviada: Desculpe, estou com um probleminha...
+```
+
+---
+
+## 💰 Custo Estimado
+
+### Arcee.ai
+
+- Custo: Variável (conforme plano)
+- Uso: Primeira opção sempre
+
+### OpenAI GPT-4o-mini (Fallback)
+
+- **Input:** $0.150 / 1M tokens
+- **Output:** $0.600 / 1M tokens
+- **Exemplo:** 100 mensagens/dia = ~$1-3/mês
+- **Só cobra se Arcee.ai falhar**
+
+### Economia:
+
+- Se Arcee.ai funcionar: R$0 extra
+- Se Arcee.ai falhar: Custo mínimo do OpenAI
+- **Sempre melhor que perder o lead!** 🎯
+
+---
+
+## �📋 Pré-requisitos
 
 1. **Node.js 18+** instalado
 
